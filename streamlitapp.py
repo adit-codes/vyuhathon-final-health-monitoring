@@ -71,18 +71,18 @@ if app_mode == "Doctor's Panel":
         
         with col_x:
             st.info("Set up parameters manually")
-            if st.button("Manual Setup (Trigger Workflow X)"):
+            if st.button("Manual Setup"):
                 try:
                     res = requests.post(N8N_WEBHOOK_WORKFLOW_X_MANUAL, json=st.session_state.temp_doc_data)
                     if res.status_code == 200:
-                        st.success("Manual Workflow X Triggered!")
+                        st.success("Manual Workflow Triggered!")
                         st.session_state.doc_step = "input" # Reset for next patient
                 except Exception as e:
                     st.error(f"Workflow X failed: {e}")
 
         with col_y:
             st.info("Let AI generate recovery parameters")
-            if st.button("AI-Generated Setup (Trigger Workflow Y)"):
+            if st.button("AI-Generated Setup "):
                 try:
                     res = requests.post(N8N_WEBHOOK_WORKFLOW_Y_AI, json=st.session_state.temp_doc_data)
                     if res.status_code == 200:
