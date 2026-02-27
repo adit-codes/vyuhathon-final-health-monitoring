@@ -52,6 +52,7 @@ if app_mode == "Doctor's Panel":
             try:
                 # Trigger the initial registration workflow
                 response = requests.post(N8N_WEBHOOK_DOCTOR_CONFIG, json=payload)
+                st.write(f"Attempting to send to: {N8N_WEBHOOK_DOCTOR_CONFIG}")
                 if response.status_code == 200:
                     st.session_state.temp_doc_data = payload
                     st.session_state.doc_step = "choice"
