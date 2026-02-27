@@ -6,7 +6,7 @@ import json
 st.set_page_config(page_title="Telehealth AI Assistant", layout="wide")
 
 # --- Webhook URLs (Replace with your actual production URLs) ---
-N8N_WEBHOOK_DOCTOR_CONFIG = "https://bytebeez.app.n8n.cloud/webhook/DOC_INP_1"
+N8N_WEBHOOK_DOCTOR_CONFIG = "https://bytebeez.app.n8n.cloud/webhook-test/DOC_INP_1"
 N8N_WEBHOOK_WORKFLOW_X_MANUAL = "https://your-n8n-instance.com/webhook/workflow-x"
 N8N_WEBHOOK_WORKFLOW_Y_AI = "https://your-n8n-instance.com/webhook/workflow-y"
 
