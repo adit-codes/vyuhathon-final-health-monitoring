@@ -6,7 +6,7 @@ import json
 st.set_page_config(page_title="Telehealth AI Assistant", layout="wide")
 
 # --- Custom N8N Webhook URLs (REPLACE WITH YOUR PRODUCTION URLS) ---
-N8N_WEBHOOK_DOCTOR_CONFIG = "https://am-space.app.n8n.cloud/webhook-test/DOCTORDATA"
+N8N_WEBHOOK_DOCTOR_CONFIG = "https://am-space.app.n8n.cloud/webhook-test/5b54e475-b51d-4bb4-bf7f-078025df0ebf"
 N8N_WEBHOOK_GET_PATIENT_PARAMS = "https://adi440.app.n8n.cloud/webhook-test/PATIENTINPUT"
 N8N_WEBHOOK_PROCESS_SUBMISSION = "https://your-n8n-instance.com/webhook/process-submission"
 
