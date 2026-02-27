@@ -7,7 +7,7 @@ st.set_page_config(page_title="Telehealth AI Assistant", layout="wide")
 
 # --- Custom N8N Webhook URLs (REPLACE THESE) ---
 # For Workflow A (Doctor - Setup)
-N8N_WEBHOOK_DOCTOR_CONFIG = "https://your-n8n-instance.com/webhook/doctor-config"
+N8N_WEBHOOK_DOCTOR_CONFIG = "https://am-space.app.n8n.cloud/webhook/DOCTORDATA"
 
 # For Workflow B (Patient - Part 1: Get Parameters)
 N8N_WEBHOOK_GET_PATIENT_PARAMS = "https://your-n8n-instance.com/webhook/get-patient-params"
