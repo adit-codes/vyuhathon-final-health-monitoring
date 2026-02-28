@@ -60,7 +60,7 @@ if app_mode == "Doctor's Panel":
             }
             try:
                 # Changed to POST as we are sending a JSON payload
-                response = requests.post(N8N_WEBHOOK_DOCTOR_CONFIG, json=payload)
+                response = requests.get(N8N_WEBHOOK_DOCTOR_CONFIG, json=payload)
                 if response.status_code == 200:
                     st.session_state.temp_data = payload
                     st.session_state.doc_step = "branch"
