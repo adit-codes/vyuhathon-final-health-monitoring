@@ -103,7 +103,7 @@ if app_mode == "Doctor's Panel":
                         "parameters": params
                     }
                     try:
-                        res = requests.post(N8N_WORKFLOW_X_MANUAL, json=manual_payload)
+                        res = requests.get(N8N_WEBHOOK_WORKFLOW_X_MANUAL, json=manual_payload)
                         if res.status_code == 200:
                             st.success("Workflow X Triggered successfully!")
                             st.session_state.doc_step = "input" # Reset
