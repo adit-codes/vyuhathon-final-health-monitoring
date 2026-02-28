@@ -182,3 +182,39 @@ elif app_mode == "Patient's Portal":
                         st.error(f"Workflow Z failed with status: {z_res.status_code}")
                 except Exception as e:
                     st.error(f"Error triggering Workflow Z: {e}")
+                    # --- DYNAMIC FORM RENDERING ---
+    if "dynamic_form_fields" in st.session_state:
+        st.write("### Daily Check-in Form")
+        captured_data = {}
+        
+        with st.form("dynamic_checkin_form"):
+            # Iterate through the fields provided by n8n
+            for item in st.session_state.dynamic_form_fields:
+                label = item.get("parameter")
+                dtype = item.get("datatype")
+                
+                # Logic to map n8n 'datatype' to Streamlit widgets
+                if dtype == "text":
+                    captured_data[label] = st.text_input(label)
+                
+                elif dtype == "audio":
+                    # For audio, we use the file uploader
+                    captured_data[label] = st.file_uploader(f"Upload audio for: {label}", type=['mp3', 'wav', 'm4a'])
+                
+                elif dtype == "image":
+                    captured_data[label] = st.file_uploader(f"Upload image for: {label}", type=['jpg', 'png', 'jpeg'])
+                
+                elif dtype == "number":
+                    captured_data[label] = st.number_input(label)
+
+            submitted = st.form_submit_button("Submit Daily Report")
+            
+            if submitted:
+                # Logic to send collected data back to n8n for processing
+                st.info("Sending report to doctor...")
+                # process_res = requests.post(N8N_WEBHOOK_PROCESS_SUBMISSION, json=captured_data)
+                st.success("Report submitted successfully!")
+
+        if st.button("Reset Form"):
+            del st.session_state.dynamic_form_fields
+            st.rerun()
