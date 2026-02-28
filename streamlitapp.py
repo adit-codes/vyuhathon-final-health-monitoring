@@ -14,7 +14,7 @@ N8N_WEBHOOK_WORKFLOW_Y_AI = "https://bytebeez.app.n8n.cloud/webhook-test/DOCinpY
 N8N_WEBHOOK_GET_PATIENT_PARAMS = "https://bytebeez.app.n8n.cloud/webhook-test/patientINP"
 N8N_WEBHOOK_PROCESS_SUBMISSION = "https://your-n8n-instance.com/webhook/process-submission"
 # --- NEW WEBHOOK FOR WORKFLOW Z ---
-N8N_WEBHOOK_WORKFLOW_Z = "https://your-n8n-instance.com/webhook/workflow-z-details"
+N8N_WEBHOOK_WORKFLOW_Z = "https://bytebeez.app.n8n.cloud/webhook-test/getParameters"
 
 # Helper function to generate a unique Patient ID
 def generate_patient_id(name):
