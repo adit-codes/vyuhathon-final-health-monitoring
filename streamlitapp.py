@@ -173,7 +173,7 @@ elif app_mode == "Patient's Portal":
                         "patient_info": details, 
                         "params": st.session_state["patient_params"]
                     }
-                    z_res = requests.post(N8N_WEBHOOK_WORKFLOW_Z, json=z_payload)
+                    z_res = requests.get(N8N_WEBHOOK_WORKFLOW_Z, json=z_payload)
                     
                     if z_res.status_code == 200:
                         st.session_state.workflow_z_triggered = True
