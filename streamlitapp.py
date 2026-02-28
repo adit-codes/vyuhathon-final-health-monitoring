@@ -124,8 +124,13 @@ elif app_mode == "Patient's Portal":
     # Initialize session state for storing analysis results
     if "last_analysis" not in st.session_state:
         st.session_state.last_analysis = None
-
+    if "login_details" not in st.session_state:
+        st.session_state.login_details = None
     if "patient_params" not in st.session_state:
+        st.session_state.patient_params = None
+
+    # --- Login Section ---
+    if st.session_state.login_details is None:
         st.info("Identify yourself to load your recovery parameters.")
         with st.form("patient_login_form"):
             id_patient_name = st.text_input("PATIENT NAME")
@@ -146,9 +151,17 @@ elif app_mode == "Patient's Portal":
                         }
                         response = requests.get(N8N_WEBHOOK_GET_PATIENT_PARAMS, json=lookup_payload)
                         response.raise_for_status()
-                        patient_params = response.json()
-                        # STEP B: Trigger Workflow Z
-    
+                        
+                        # Save to session state upon success
+                        st.session_state.patient_params = response.json()
+                        st.session_state.login_details = lookup_payload
+                        st.rerun() # Refresh to show the next section
+                        
+                    except Exception as e:
+                        st.error(f"Error fetching patient parameters: {e}")
+
+    # --- Post-Login Section (Workflow Z) ---
+    else:
         details = st.session_state["login_details"]
         st.subheader(f"Welcome, {details['Patient Name']}")
         st.write("Your profile is loaded. Before entering your daily data, please initialize the session.")
@@ -156,15 +169,16 @@ elif app_mode == "Patient's Portal":
         if st.button("Fetch Data Input Details (Trigger Workflow Z)"):
             with st.spinner("Running Workflow Z..."):
                 try:
-                    z_payload = {"patient_info": details, "params": st.session_state["patient_params"]}
+                    z_payload = {
+                        "patient_info": details, 
+                        "params": st.session_state["patient_params"]
+                    }
                     z_res = requests.post(N8N_WEBHOOK_WORKFLOW_Z, json=z_payload)
+                    
                     if z_res.status_code == 200:
                         st.session_state.workflow_z_triggered = True
                         st.success("Workflow Z initialized successfully!")
-                        st.rerun()
                     else:
                         st.error(f"Workflow Z failed with status: {z_res.status_code}")
                 except Exception as e:
                     st.error(f"Error triggering Workflow Z: {e}")
-
-                        
