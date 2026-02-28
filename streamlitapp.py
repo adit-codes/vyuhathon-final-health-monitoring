@@ -7,13 +7,15 @@ import hashlib
 # --- Page Configurations ---
 st.set_page_config(page_title="Telehealth AI Assistant", layout="wide")
 
-# --- Webhook URLs (Replace with your actual production URLs) ---
+# --- Webhook URLs ---
 N8N_WEBHOOK_DOCTOR_CONFIG = "https://bytebeez.app.n8n.cloud/webhook-test/DOCinp1"
 N8N_WEBHOOK_WORKFLOW_X_MANUAL = "https://bytebeez.app.n8n.cloud/webhook-test/WORKFLOW_X_MANUAL"
 N8N_WEBHOOK_WORKFLOW_Y_AI = "https://bytebeez.app.n8n.cloud/webhook-test/DOCinpY"
-
 N8N_WEBHOOK_GET_PATIENT_PARAMS = "https://bytebeez.app.n8n.cloud/webhook-test/patientINP"
 N8N_WEBHOOK_PROCESS_SUBMISSION = "https://your-n8n-instance.com/webhook/process-submission"
+# --- NEW WEBHOOK FOR WORKFLOW Z ---
+N8N_WEBHOOK_WORKFLOW_Z = "https://your-n8n-instance.com/webhook/workflow-z-details"
+
 # Helper function to generate a unique Patient ID
 def generate_patient_id(name):
     timestamp = str(time.time())
@@ -30,13 +32,11 @@ app_mode = st.sidebar.selectbox("Choose Interface", ["Doctor's Panel", "Patient'
 if app_mode == "Doctor's Panel":
     st.header("1. Doctor's Configuration Panel")
     
-    # Initialize state to manage the two-step process
     if "doc_step" not in st.session_state:
         st.session_state.doc_step = "input"
-    if "temp_doc_data" not in st.session_state:
-        st.session_state.temp_doc_data = {}
+    if "temp_data" not in st.session_state:
+        st.session_state.temp_data = {}
 
-    # --- STEP 1: Registration ---
     if st.session_state.doc_step == "input":
         with st.form("doctor_config_form"):
             col1, col2 = st.columns(2)
@@ -50,11 +50,9 @@ if app_mode == "Doctor's Panel":
             submitted = st.form_submit_button("Register Patient & Proceed")
 
         if submitted:
-            # The ID is generated here and kept in the payload variable
             new_patient_id = generate_patient_id(patient_name)
-            
             payload = {
-                "Patient ID": new_patient_id, # Sent to webhook, but hidden from UI later
+                "Patient ID": new_patient_id,
                 "Doc Name": doc_name,
                 "Patient Name": patient_name,
                 "Patient Age": patient_age,
@@ -70,18 +68,14 @@ if app_mode == "Doctor's Panel":
                     st.error(f"Failed to register. Status: {response.status_code}")
             except Exception as e:
                 st.error(f"Error: {e}")
-# --- STEP 2: Success Message & Branching Choice ---
+
     elif st.session_state.doc_step == "branch":
-        # DISPLAY: Success message with Name and ID
         p_name = st.session_state.temp_data.get('Patient Name')
         p_id = st.session_state.temp_data.get('Patient ID')
         
         st.success(f"✅ Patient Registered: **{p_name}** | ID: **{p_id}**")
-        st.info("Please choose the monitoring setup below.")
-        
         choice = st.radio("Choose Monitoring Method:", ["Manual Setup", "AI-Generated Setup"], horizontal=True)
         
-        # --- MANUAL SETUP OPTION ---
         if choice == "Manual Setup":
             st.markdown("### 📝 Define Manual Parameters")
             with st.form("manual_param_form"):
@@ -90,29 +84,24 @@ if app_mode == "Doctor's Panel":
                     st.write(f"**Parameter {i}**")
                     c1, c2, c3 = st.columns(3)
                     with c1:
-                        p_name = st.text_input(f"Name {i}", key=f"n{i}")
+                        pn = st.text_input(f"Name {i}", key=f"n{i}")
                     with c2:
-                        p_thresh = st.text_input(f"Threshold {i}", key=f"t{i}")
+                        pt = st.text_input(f"Threshold {i}", key=f"t{i}")
                     with c3:
-                        p_type = st.selectbox(f"Data Type {i}", ["text","audio", "image"], key=f"d{i}")
-                    params.append({"name": p_name, "threshold": p_thresh, "data_type": p_type})
+                        pty = st.selectbox(f"Data Type {i}", ["text","audio", "image"], key=f"d{i}")
+                    params.append({"name": pn, "threshold": pt, "data_type": pty})
 
                 if st.form_submit_button("Submit Manual Parameters"):
-                    manual_payload = {
-                        "patient_info": st.session_state.temp_data,
-                        "parameters": params
-                    }
+                    manual_payload = {"patient_info": st.session_state.temp_data, "parameters": params}
                     try:
                         res = requests.get(N8N_WEBHOOK_WORKFLOW_X_MANUAL, json=manual_payload)
                         if res.status_code == 200:
                             st.success("Workflow X Triggered successfully!")
-                            st.session_state.doc_step = "input" # Reset
+                            st.session_state.doc_step = "input"
                     except Exception as e:
                         st.error(f"Workflow X failed: {e}")
 
-        # --- AI SETUP OPTION ---
         elif choice == "AI-Generated Setup":
-            st.info("AI will automatically determine thresholds based on surgery type.")
             if st.button("Generate via AI (Workflow Y)"):
                 try:
                     res = requests.get(N8N_WEBHOOK_WORKFLOW_Y_AI, json=st.session_state.temp_data)
@@ -132,13 +121,16 @@ if app_mode == "Doctor's Panel":
 elif app_mode == "Patient's Portal":
     st.header("2. Patient's Daily Portal")
     
+    # Initialize session state for storing analysis results
+    if "last_analysis" not in st.session_state:
+        st.session_state.last_analysis = None
+
     if "patient_params" not in st.session_state:
         st.info("Identify yourself to load your recovery parameters.")
         with st.form("patient_login_form"):
             id_patient_name = st.text_input("PATIENT NAME")
             id_doctor_name = st.text_input("DOCTOR NAME")
             id_surgery = st.text_input("SURGERY UNDERGONE")
-            
             login_submitted = st.form_submit_button("Fetch My Daily Check-in Form")
 
         if login_submitted:
@@ -155,66 +147,24 @@ elif app_mode == "Patient's Portal":
                         response = requests.get(N8N_WEBHOOK_GET_PATIENT_PARAMS, json=lookup_payload)
                         response.raise_for_status()
                         patient_params = response.json()
-
-                        if patient_params and isinstance(patient_params, list):
-                            st.session_state["patient_params"] = patient_params
-                            st.session_state["login_details"] = lookup_payload
-                            st.rerun()
-                        else:
-                            st.error("Recovery plan not found. Please verify details.")
-                    except Exception as e:
-                        st.error(f"Connection error: {e}")
-
-    if "patient_params" in st.session_state:
+                        # STEP B: Trigger Workflow Z
+    
         details = st.session_state["login_details"]
-        st.subheader(f"Daily Entry for {details['Patient Name']}")
-        st.caption(f"Physician: {details['Doc Name']} | Surgery: {details['Surgery Type']}")
+        st.subheader(f"Welcome, {details['Patient Name']}")
+        st.write("Your profile is loaded. Before entering your daily data, please initialize the session.")
         
-        with st.form("daily_checkin_form"):
-            input_data = {}
-            files_to_send = {}
+        if st.button("Fetch Data Input Details (Trigger Workflow Z)"):
+            with st.spinner("Running Workflow Z..."):
+                try:
+                    z_payload = {"patient_info": details, "params": st.session_state["patient_params"]}
+                    z_res = requests.post(N8N_WEBHOOK_WORKFLOW_Z, json=z_payload)
+                    if z_res.status_code == 200:
+                        st.session_state.workflow_z_triggered = True
+                        st.success("Workflow Z initialized successfully!")
+                        st.rerun()
+                    else:
+                        st.error(f"Workflow Z failed with status: {z_res.status_code}")
+                except Exception as e:
+                    st.error(f"Error triggering Workflow Z: {e}")
 
-            for param in st.session_state["patient_params"]:
-                p_name = param.get("name")
-                p_type = param.get("data_type", "text").lower()
-                
-                if p_type == "text":
-                    input_data[p_name] = st.text_input(p_name)
-                elif p_type == "number":
-                    input_data[p_name] = st.number_input(p_name)
-                elif p_type == "audio":
-                    audio = st.file_uploader(f"Upload Audio: {p_name}", type=["mp3", "wav"])
-                    if audio: files_to_send["audio_file"] = (audio.name, audio, audio.type)
-                elif p_type == "image":
-                    img = st.file_uploader(f"Upload Image: {p_name}", type=["jpg", "png"])
-                    if img: files_to_send["image_file"] = (img.name, img, img.type)
-
-            submit_final = st.form_submit_button("Submit Daily Check-in & Analyze")
-
-            if submit_final:
-                with st.spinner("AI is analyzing..."):
-                    payload = {
-                        "identification": st.session_state["login_details"],
-                        "readings": input_data
-                    }
-                    try:
-                        res = requests.post(
-                            N8N_WEBHOOK_PROCESS_SUBMISSION, 
-                            data={"main_data": json.dumps(payload)}, 
-                            files=files_to_send
-                        )
-                        res.raise_for_status()
-                        analysis = res.json()
                         
-                        st.divider()
-                        st.success("Analysis Complete!")
-                        st.metric("Recovery Rate", f"{analysis.get('recovery_rate', 0)}%")
-                        st.write(f"**AI Evaluation:** {analysis.get('recovery_status')}")
-                        
-                        if analysis.get('risk_status') == "Risk":
-                            st.error(f"🚨 ALERT: {analysis.get('alert_details')}")
-                        else:
-                            st.balloons()
-                            
-                    except Exception as e:
-                        st.error(f"Submission failed: {e}")
