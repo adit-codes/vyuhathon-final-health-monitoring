@@ -79,7 +79,7 @@ if app_mode == "Doctor's Panel":
         st.success(f"✅ Patient Registered: **{p_name}** | ID: **{p_id}**")
         st.info("Please choose the monitoring setup below.")
         
-        choice = st.radio("Choose Monitoring Method:", ["Select Option", "Manual Setup", "AI-Generated Setup"], horizontal=True)
+        choice = st.radio("Choose Monitoring Method:", ["Manual Setup", "AI-Generated Setup"], horizontal=True)
         
         # --- MANUAL SETUP OPTION ---
         if choice == "Manual Setup":
@@ -94,10 +94,10 @@ if app_mode == "Doctor's Panel":
                     with c2:
                         p_thresh = st.text_input(f"Threshold {i}", key=f"t{i}")
                     with c3:
-                        p_type = st.selectbox(f"Data Type {i}", ["text", "number", "audio", "image"], key=f"d{i}")
+                        p_type = st.selectbox(f"Data Type {i}", ["text","audio", "image"], key=f"d{i}")
                     params.append({"name": p_name, "threshold": p_thresh, "data_type": p_type})
 
-                if st.form_submit_button("Submit Manual Parameters (Workflow X)"):
+                if st.form_submit_button("Submit Manual Parameters"):
                     manual_payload = {
                         "patient_info": st.session_state.temp_data,
                         "parameters": params
