@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 import json
+import time 
+import hashlib 
 
 # --- Page Configurations ---
 st.set_page_config(page_title="Telehealth AI Assistant", layout="wide")
