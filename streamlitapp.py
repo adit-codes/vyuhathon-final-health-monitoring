@@ -181,4 +181,4 @@ else:
     "parameter": "Wound Status",
     "datatype": "text"
   }
-]. the next feature i want to add to code is, the code should be able to get all the parameters and datatypes. These need to be output to user, with the each parameter as question header. important thing is, based on the datatype for each parameter, the input field should be according to the data type, for example if datatype is audio they should have inputfield to enter sudio. please help with this
+]
