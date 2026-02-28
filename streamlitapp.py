@@ -58,7 +58,7 @@ if app_mode == "Doctor's Panel":
                 "Surgery Type": surgery_type
             }
             try:
-                response = requests.post(N8N_WEBHOOK_DOCTOR_CONFIG, json=payload)
+                response = requests.get(N8N_WEBHOOK_DOCTOR_CONFIG, json=payload)
                 if response.status_code == 200:
                     st.session_state.temp_data = payload
                     st.session_state.doc_step = "branch"
@@ -93,7 +93,7 @@ if app_mode == "Doctor's Panel":
                 if st.form_submit_button("Submit Manual Parameters"):
                     manual_payload = {"patient_info": st.session_state.temp_data, "parameters": params}
                     try:
-                        res = requests.post(N8N_WEBHOOK_WORKFLOW_X_MANUAL, json=manual_payload)
+                        res = requests.get(N8N_WEBHOOK_WORKFLOW_X_MANUAL, json=manual_payload)
                         if res.status_code == 200:
                             st.success("Workflow X Triggered successfully!")
                             st.session_state.doc_step = "input"
@@ -103,7 +103,7 @@ if app_mode == "Doctor's Panel":
         elif choice == "AI-Generated Setup":
             if st.button("Generate via AI (Workflow Y)"):
                 try:
-                    res = requests.post(N8N_WEBHOOK_WORKFLOW_Y_AI, json=st.session_state.temp_data)
+                    res = requests.get(N8N_WEBHOOK_WORKFLOW_Y_AI, json=st.session_state.temp_data)
                     if res.status_code == 200:
                         st.success("AI Workflow Y Triggered!")
                         st.balloons()
@@ -163,38 +163,49 @@ elif app_mode == "Patient's Portal":
                     except Exception as e:
                         st.error(f"Error: {e}")
         
-        # --- Dynamic Form Generation based on Workflow Z JSON ---
-        else:
-            st.write("Please fill in your daily recovery data:")
-            with st.form("daily_submission_form"):
-                user_responses = {}
-                for item in st.session_state.dynamic_fields:
-                    label = item.get("parameter")
-                    dtype = item.get("datatype")
-                    
-                    if dtype == "number":
-                        user_responses[label] = st.number_input(f"Enter {label}", key=label)
-                    elif dtype == "text":
-                        user_responses[label] = st.text_area(f"Enter {label}", key=label)
-                    # Add more types if needed (image, audio, etc.)
+# --- Dynamic Form Generation based on Workflow Z JSON ---
+else:
+    st.write("Please fill in your daily recovery data:")
+    with st.form("daily_submission_form"):
+        user_responses = {}
+        for item in st.session_state.dynamic_fields:
+            label = item.get("parameter")
+            dtype = item.get("datatype")
+            
+            if dtype == "number":
+                user_responses[label] = st.number_input(f"Enter {label}", key=label)
+            
+            elif dtype == "text":
+                user_responses[label] = st.text_area(f"Enter {label}", key=label)
+            
+            # --- New Logic for Media Links ---
+            elif dtype == "video":
+                user_responses[label] = st.text_input(
+                    f"Enter {label} (Drive/Video URL)", 
+                    placeholder="https://drive.google.com/...", 
+                    key=label
+                )
                 
-                if st.form_submit_button("Submit Daily Report"):
-                    # Process the final submission
-                    final_payload = {
-                        "metadata": st.session_state.login_details,
-                        "data": user_responses
-                    }
-                    try:
-                        res = requests.post(N8N_WEBHOOK_PROCESS_SUBMISSION, json=final_payload)
-                        if res.status_code == 200:
-                            st.success("Report submitted successfully!")
-                            st.balloons()
-                        else:
-                            st.error("Submission failed.")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-
-        if st.button("Logout"):
-            st.session_state.login_details = None
-            st.session_state.dynamic_fields = None
-            st.rerun()
+            elif dtype == "audio":
+                user_responses[label] = st.text_input(
+                    f"Enter {label} (Drive/Audio URL)", 
+                    placeholder="https://drive.google.com/...", 
+                    key=label
+                )
+            # ----------------------------------
+        
+        if st.form_submit_button("Submit Daily Report"):
+            # Process the final submission
+            final_payload = {
+                "metadata": st.session_state.login_details,
+                "data": user_responses
+            }
+            try:
+                res = requests.post(N8N_WEBHOOK_PROCESS_SUBMISSION, json=final_payload)
+                if res.status_code == 200:
+                    st.success("Report submitted successfully!")
+                    st.balloons()
+                else:
+                    st.error(f"Submission failed. Status code: {res.status_code}")
+            except Exception as e:
+                st.error(f"Error: {e}")
