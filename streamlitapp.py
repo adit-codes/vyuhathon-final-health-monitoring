@@ -7,11 +7,16 @@ st.set_page_config(page_title="Telehealth AI Assistant", layout="wide")
 
 # --- Webhook URLs (Replace with your actual production URLs) ---
 N8N_WEBHOOK_DOCTOR_CONFIG = "https://bytebeez.app.n8n.cloud/webhook-test/DOCinp1"
-N8N_WEBHOOK_WORKFLOW_X_MANUAL = "https://your-n8n-instance.com/webhook/workflow-x"
+N8N_WEBHOOK_WORKFLOW_X_MANUAL = "https://bytebeez.app.n8n.cloud/webhook-test/WORKFLOW_X_MANUAL"
 N8N_WEBHOOK_WORKFLOW_Y_AI = "https://your-n8n-instance.com/webhook/workflow-y"
 
 N8N_WEBHOOK_GET_PATIENT_PARAMS = "https://adi440.app.n8n.cloud/webhook-test/PATIENTINPUT"
 N8N_WEBHOOK_PROCESS_SUBMISSION = "https://your-n8n-instance.com/webhook/process-submission"
+# Helper function to generate a unique Patient ID
+def generate_patient_id(name):
+    timestamp = str(time.time())
+    unique_str = f"{name}-{timestamp}"
+    return f"PAT-{hashlib.md5(unique_str.encode()).hexdigest()[:8].upper()}"
 
 st.title("AI-Powered Patient Recovery Monitoring")
 
@@ -29,7 +34,7 @@ if app_mode == "Doctor's Panel":
     if "temp_doc_data" not in st.session_state:
         st.session_state.temp_doc_data = {}
 
-    # --- STEP 1: Initial Registration Form ---
+    # --- STEP 1: Registration ---
     if st.session_state.doc_step == "input":
         with st.form("doctor_config_form"):
             col1, col2 = st.columns(2)
@@ -43,56 +48,79 @@ if app_mode == "Doctor's Panel":
             submitted = st.form_submit_button("Register Patient & Proceed")
 
         if submitted:
+            # The ID is generated here and kept in the payload variable
+            new_patient_id = generate_patient_id(patient_name)
+            
             payload = {
+                "Patient ID": new_patient_id, # Sent to webhook, but hidden from UI later
                 "Doc Name": doc_name,
                 "Patient Name": patient_name,
                 "Patient Age": patient_age,
                 "Surgery Type": surgery_type
             }
             try:
-                # Trigger the initial registration workflow
-                response = requests.get(N8N_WEBHOOK_DOCTOR_CONFIG, json=payload)
-                st.write(f"Attempting to send to: {N8N_WEBHOOK_DOCTOR_CONFIG}")
+                response = requests.post(N8N_REGISTRATION_URL, json=payload)
                 if response.status_code == 200:
-                    st.session_state.temp_doc_data = payload
-                    st.session_state.doc_step = "choice"
+                    st.session_state.temp_data = payload
+                    st.session_state.doc_step = "branch"
                     st.rerun()
                 else:
                     st.error(f"Failed to register. Status: {response.status_code}")
             except Exception as e:
                 st.error(f"Error: {e}")
-
-    # --- STEP 2: Branching Choice (Manual vs AI) ---
-    elif st.session_state.doc_step == "choice":
-        st.success(f"Successfully registered {st.session_state.temp_doc_data['Patient Name']}!")
-        st.subheader("Select Monitoring Setup Type")
+# --- STEP 2: Success Message & Branching Choice ---
+    elif st.session_state.doc_step == "branch":
+        # DISPLAY: Success message with Name and ID
+        p_name = st.session_state.temp_data.get('Patient Name')
+        p_id = st.session_state.temp_data.get('Patient ID')
         
-        col_x, col_y = st.columns(2)
+        st.success(f"✅ Patient Registered: **{p_name}** | ID: **{p_id}**")
+        st.info("Please choose the monitoring setup below.")
         
-        with col_x:
-            st.info("Set up parameters manually")
-            if st.button("Manual Setup"):
-                try:
-                    res = requests.post(N8N_WEBHOOK_WORKFLOW_X_MANUAL, json=st.session_state.temp_doc_data)
-                    if res.status_code == 200:
-                        st.success("Manual Workflow Triggered!")
-                        st.session_state.doc_step = "input" # Reset for next patient
-                except Exception as e:
-                    st.error(f"Workflow X failed: {e}")
+        choice = st.radio("Choose Monitoring Method:", ["Select Option", "Manual Setup", "AI-Generated Setup"], horizontal=True)
+        
+        # --- MANUAL SETUP OPTION ---
+        if choice == "Manual Setup":
+            st.markdown("### 📝 Define Manual Parameters")
+            with st.form("manual_param_form"):
+                params = []
+                for i in range(1, 4):
+                    st.write(f"**Parameter {i}**")
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        p_name = st.text_input(f"Name {i}", key=f"n{i}")
+                    with c2:
+                        p_thresh = st.text_input(f"Threshold {i}", key=f"t{i}")
+                    with c3:
+                        p_type = st.selectbox(f"Data Type {i}", ["text", "number", "audio", "image"], key=f"d{i}")
+                    params.append({"name": p_name, "threshold": p_thresh, "data_type": p_type})
 
-        with col_y:
-            st.info("Let AI generate recovery parameters")
-            if st.button("AI-Generated Setup "):
+                if st.form_submit_button("Submit Manual Parameters (Workflow X)"):
+                    manual_payload = {
+                        "patient_info": st.session_state.temp_data,
+                        "parameters": params
+                    }
+                    try:
+                        res = requests.post(N8N_WORKFLOW_X_MANUAL, json=manual_payload)
+                        if res.status_code == 200:
+                            st.success("Workflow X Triggered successfully!")
+                            st.session_state.doc_step = "input" # Reset
+                    except Exception as e:
+                        st.error(f"Workflow X failed: {e}")
+
+        # --- AI SETUP OPTION ---
+        elif choice == "AI-Generated Setup":
+            st.info("AI will automatically determine thresholds based on surgery type.")
+            if st.button("Generate via AI (Workflow Y)"):
                 try:
-                    res = requests.post(N8N_WEBHOOK_WORKFLOW_Y_AI, json=st.session_state.temp_doc_data)
+                    res = requests.post(N8N_WORKFLOW_Y_AI, json=st.session_state.temp_data)
                     if res.status_code == 200:
                         st.success("AI Workflow Y Triggered!")
                         st.balloons()
-                        st.session_state.doc_step = "input" # Reset for next patient
                 except Exception as e:
                     st.error(f"Workflow Y failed: {e}")
-        
-        if st.button("Cancel / Restart"):
+
+        if st.button("← Cancel & Reset"):
             st.session_state.doc_step = "input"
             st.rerun()
 
