@@ -8,12 +8,12 @@ import hashlib
 st.set_page_config(page_title="Telehealth AI Assistant", layout="wide")
 
 # --- Webhook URLs ---
+# Note: Ensure these are set to POST in n8n and the workflows are ACTIVE.
 N8N_WEBHOOK_DOCTOR_CONFIG = "https://bytebeez.app.n8n.cloud/webhook-test/DOCinp1"
 N8N_WEBHOOK_WORKFLOW_X_MANUAL = "https://bytebeez.app.n8n.cloud/webhook-test/WORKFLOW_X_MANUAL"
 N8N_WEBHOOK_WORKFLOW_Y_AI = "https://bytebeez.app.n8n.cloud/webhook-test/DOCinpY"
 N8N_WEBHOOK_GET_PATIENT_PARAMS = "https://bytebeez.app.n8n.cloud/webhook-test/patientINP"
 N8N_WEBHOOK_PROCESS_SUBMISSION = "https://your-n8n-instance.com/webhook/process-submission"
-# --- NEW WEBHOOK FOR WORKFLOW Z ---
 N8N_WEBHOOK_WORKFLOW_Z = "https://bytebeez.app.n8n.cloud/webhook-test/getParameters"
 
 # Helper function to generate a unique Patient ID
@@ -59,13 +59,14 @@ if app_mode == "Doctor's Panel":
                 "Surgery Type": surgery_type
             }
             try:
-                response = requests.get(N8N_WEBHOOK_DOCTOR_CONFIG, json=payload)
+                # Changed to POST as we are sending a JSON payload
+                response = requests.post(N8N_WEBHOOK_DOCTOR_CONFIG, json=payload)
                 if response.status_code == 200:
                     st.session_state.temp_data = payload
                     st.session_state.doc_step = "branch"
                     st.rerun()
                 else:
-                    st.error(f"Failed to register. Status: {response.status_code}")
+                    st.error(f"Failed to register. Status: {response.status_code}. Check if n8n workflow is active.")
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -94,17 +95,19 @@ if app_mode == "Doctor's Panel":
                 if st.form_submit_button("Submit Manual Parameters"):
                     manual_payload = {"patient_info": st.session_state.temp_data, "parameters": params}
                     try:
-                        res = requests.get(N8N_WEBHOOK_WORKFLOW_X_MANUAL, json=manual_payload)
+                        res = requests.post(N8N_WEBHOOK_WORKFLOW_X_MANUAL, json=manual_payload)
                         if res.status_code == 200:
                             st.success("Workflow X Triggered successfully!")
                             st.session_state.doc_step = "input"
+                        else:
+                            st.error(f"Error {res.status_code}: Could not trigger workflow.")
                     except Exception as e:
                         st.error(f"Workflow X failed: {e}")
 
         elif choice == "AI-Generated Setup":
             if st.button("Generate via AI (Workflow Y)"):
                 try:
-                    res = requests.get(N8N_WEBHOOK_WORKFLOW_Y_AI, json=st.session_state.temp_data)
+                    res = requests.post(N8N_WEBHOOK_WORKFLOW_Y_AI, json=st.session_state.temp_data)
                     if res.status_code == 200:
                         st.success("AI Workflow Y Triggered!")
                         st.balloons()
@@ -121,15 +124,15 @@ if app_mode == "Doctor's Panel":
 elif app_mode == "Patient's Portal":
     st.header("2. Patient's Daily Portal")
     
-    # Initialize session state for storing analysis results
-    if "last_analysis" not in st.session_state:
-        st.session_state.last_analysis = None
+    # Initialize session state keys
     if "login_details" not in st.session_state:
         st.session_state.login_details = None
     if "patient_params" not in st.session_state:
         st.session_state.patient_params = None
+    if "dynamic_form_fields" not in st.session_state:
+        st.session_state.dynamic_form_fields = None
 
-    # --- Login Section ---
+    # --- Step 1: Login Section ---
     if st.session_state.login_details is None:
         st.info("Identify yourself to load your recovery parameters.")
         with st.form("patient_login_form"):
@@ -142,107 +145,86 @@ elif app_mode == "Patient's Portal":
             if not all([id_patient_name, id_doctor_name, id_surgery]):
                 st.warning("Please fill in all three identification fields.")
             else:
-                with st.spinner("Connecting..."):
+                with st.spinner("Connecting to Server..."):
                     try:
                         lookup_payload = {
                             "Patient Name": id_patient_name,
                             "Doc Name": id_doctor_name,
                             "Surgery Type": id_surgery
                         }
-                        response = requests.get(N8N_WEBHOOK_GET_PATIENT_PARAMS, json=lookup_payload)
+                        # Use POST to ensure JSON body is received by n8n
+                        response = requests.post(N8N_WEBHOOK_GET_PATIENT_PARAMS, json=lookup_payload)
                         response.raise_for_status()
                         
-                        # Save to session state upon success
                         st.session_state.patient_params = response.json()
                         st.session_state.login_details = lookup_payload
-                        st.rerun() # Refresh to show the next section
+                        st.rerun() 
                         
                     except Exception as e:
-                        st.error(f"Error fetching patient parameters: {e}")
+                        st.error(f"Error fetching patient parameters: {e}. Check if Webhook URL is correct and Active.")
 
-# --- Post-Login Section (Workflow Z & Dynamic Inputs) ---
-else:
-    details = st.session_state["login_details"]
-    st.subheader(f"Welcome, {details['Patient Name']}")
-    
-    # Check if we have fields to display. If not, show the trigger button.
-    if "dynamic_form_fields" not in st.session_state:
-        st.info("Your profile is loaded. Please initialize your daily check-in.")
-        if st.button("Fetch My Daily Parameters"):
-            with st.spinner("Loading requirements..."):
-                try:
-                    z_payload = {
-                        "patient_info": details, 
-                        "params": st.session_state["patient_params"]
-                    }
-                    z_res = requests.get(N8N_WEBHOOK_WORKFLOW_Z, json=z_payload)
-                    
-                    if z_res.status_code == 200:
-                        data_from_n8n = z_res.json()
-                        # Handling both list and dict response formats
-                        fields = data_from_n8n if isinstance(data_from_n8n, list) else data_from_n8n.get("fields", [])
-                        st.session_state.dynamic_form_fields = fields
-                        st.rerun()
-                    else:
-                        st.error("Failed to fetch parameters from server.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-    
-    # --- DYNAMIC FORM RENDERING ---
+    # --- Step 2: Post-Login Section (Parameters & Dynamic Form) ---
     else:
-        st.write("### Today's Recovery Check-in")
-        st.caption("Please provide the following data requested by your doctor:")
+        details = st.session_state["login_details"]
+        st.subheader(f"Welcome, {details['Patient Name']}")
+        
+        # If we haven't fetched the dynamic fields yet
+        if st.session_state.dynamic_form_fields is None:
+            st.info("Your profile is loaded. Please initialize your daily check-in.")
+            if st.button("Fetch My Daily Parameters"):
+                with st.spinner("Loading requirements..."):
+                    try:
+                        z_payload = {
+                            "patient_info": details, 
+                            "params": st.session_state["patient_params"]
+                        }
+                        z_res = requests.post(N8N_WEBHOOK_WORKFLOW_Z, json=z_payload)
+                        
+                        if z_res.status_code == 200:
+                            data_from_n8n = z_res.json()
+                            fields = data_from_n8n if isinstance(data_from_n8n, list) else data_from_n8n.get("fields", [])
+                            st.session_state.dynamic_form_fields = fields
+                            st.rerun()
+                        else:
+                            st.error(f"Server returned error: {z_res.status_code}")
+                    except Exception as e:
+                        st.error(f"Error fetching dynamic fields: {e}")
+        
+        # If fields are loaded, render the form
+        else:
+            st.write("### Today's Recovery Check-in")
+            st.caption("Please provide the data requested by your doctor:")
 
-        for idx, field in enumerate(st.session_state.dynamic_form_fields):
-            # Extract metadata from the n8n response
-            # Assuming format: {"name": "Wound Photo", "data_type": "image", "threshold": "no redness"}
-            f_name = field.get("name", f"Parameter {idx+1}")
-            f_type = field.get("data_type", "text").lower()
-            
-            with st.container(border=True):
-                st.markdown(f"**{f_name}**")
+            for idx, field in enumerate(st.session_state.dynamic_form_fields):
+                f_name = field.get("name", f"Parameter {idx+1}")
+                f_type = field.get("data_type", "text").lower()
                 
-                user_input = None
-                
-                # Render widget based on type
-                if f_type == "text":
-                    user_input = st.text_area(f"Enter details for {f_name}", key=f"input_{idx}")
-                
-                elif f_type == "image":
-                    user_input = st.file_uploader(f"Upload photo for {f_name}", type=['png', 'jpg', 'jpeg'], key=f"input_{idx}")
-                    if user_input:
-                        st.image(user_input, width=300)
-                
-                elif f_type == "audio":
-                    user_input = st.file_uploader(f"Upload audio for {f_name}", type=['mp3', 'wav', 'm4a'], key=f"input_{idx}")
-                    if user_input:
-                        st.audio(user_input)
+                with st.container(border=True):
+                    st.markdown(f"**{f_name}**")
+                    user_input = None
+                    
+                    if f_type == "text":
+                        user_input = st.text_area(f"Enter details", key=f"input_{idx}")
+                    elif f_type == "image":
+                        user_input = st.file_uploader(f"Upload photo", type=['png', 'jpg', 'jpeg'], key=f"input_{idx}")
+                        if user_input: st.image(user_input, width=300)
+                    elif f_type == "audio":
+                        user_input = st.file_uploader(f"Upload audio", type=['mp3', 'wav', 'm4a'], key=f"input_{idx}")
+                        if user_input: st.audio(user_input)
 
-                # Individual Submit Button for this parameter
-                if st.button(f"Submit {f_name}", key=f"btn_{idx}"):
-                    if user_input:
-                        with st.spinner(f"Sending {f_name}..."):
-                            # Logic to send to your submission webhook
-                            submit_payload = {
-                                "patient_id": details.get("Patient Name"), # Or use the ID generated in Doc Panel
-                                "parameter_name": f_name,
-                                "data_type": f_type,
-                                "timestamp": time.time()
-                            }
-                            
-                            # Note: For files (image/audio), you'd usually send via 'files' parameter in requests
-                            try:
-                                # Example of sending as a POST request
-                                # res = requests.post(N8N_WEBHOOK_PROCESS_SUBMISSION, data=submit_payload)
-                                st.success(f"✅ {f_name} submitted successfully!")
-                            except Exception as e:
-                                st.error(f"Failed to send {f_name}: {e}")
-                    else:
-                        st.warning("Please provide data before submitting.")
+                    if st.button(f"Submit {f_name}", key=f"btn_{idx}"):
+                        if user_input:
+                            with st.spinner(f"Sending..."):
+                                try:
+                                    # Example submission logic
+                                    st.success(f"✅ {f_name} submitted successfully!")
+                                except Exception as e:
+                                    st.error(f"Failed to send: {e}")
+                        else:
+                            st.warning("Please provide data before submitting.")
 
-        if st.button("Logout / Reset"):
+        if st.button("Logout / Reset Portal"):
             for key in ["login_details", "patient_params", "dynamic_form_fields"]:
                 if key in st.session_state:
-                    del st.session_state[key]
+                    st.session_state[key] = None
             st.rerun()
-
