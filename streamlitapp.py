@@ -3,6 +3,14 @@ import requests
 import json
 import time
 import hashlib
+import base64
+
+# --- Helper Function for File Handling ---
+def encode_file_to_base64(uploaded_file):
+    if uploaded_file is not None:
+        file_bytes = uploaded_file.getvalue()
+        return base64.b64encode(file_bytes).decode('utf-8')
+    return None
 
 # --- Page Configurations ---
 st.set_page_config(page_title="Telehealth AI Assistant", layout="wide")
@@ -122,13 +130,13 @@ if app_mode == "Doctor's Panel":
 elif app_mode == "Patient's Portal":
     st.header("2. Patient's Daily Portal")
     
+    # Initialize session states
     if "login_details" not in st.session_state:
         st.session_state.login_details = None
-    if "patient_params" not in st.session_state:
-        st.session_state.patient_params = None
-    if "dynamic_form_fields" not in st.session_state:
-        st.session_state.dynamic_form_fields = None
+    if "dynamic_params" not in st.session_state:
+        st.session_state.dynamic_params = None
 
+    # --- Login Section ---
     if st.session_state.login_details is None:
         st.info("Identify yourself to load your recovery parameters.")
         with st.form("patient_login_form"):
@@ -137,62 +145,94 @@ elif app_mode == "Patient's Portal":
             id_surgery = st.text_input("SURGERY UNDERGONE")
             login_submitted = st.form_submit_button("Fetch My Daily Check-in Form")
 
-        if login_submitted:
-            if not all([id_patient_name, id_doctor_name, id_surgery]):
-                st.warning("Please fill in all three fields.")
-            else:
-                with st.spinner("Connecting to Server..."):
-                    try:
-                        lookup_payload = {
-                            "Patient Name": id_patient_name,
-                            "Doc Name": id_doctor_name,
-                            "Surgery Type": id_surgery
-                        }
-                        response = requests.post(N8N_WEBHOOK_GET_PATIENT_PARAMS, json=lookup_payload)
-                        response.raise_for_status()
-                        st.session_state.patient_params = response.json()
-                        st.session_state.login_details = lookup_payload
-                        st.rerun() 
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+            if login_submitted:
+                if not all([id_patient_name, id_doctor_name, id_surgery]):
+                    st.warning("Please fill in all fields.")
+                else:
+                    st.session_state.login_details = {
+                        "Patient Name": id_patient_name,
+                        "Doc Name": id_doctor_name,
+                        "Surgery Type": id_surgery
+                    }
+                    st.rerun()
 
+    # --- Post-Login Section ---
     else:
         details = st.session_state["login_details"]
         st.subheader(f"Welcome, {details['Patient Name']}")
         
-        if st.session_state.dynamic_form_fields is None:
-            if st.button("Fetch My Daily Parameters"):
-                with st.spinner("Loading requirements..."):
-                    try:
-                        z_payload = {"patient_info": details, "params": st.session_state["patient_params"]}
-                        z_res = requests.post(N8N_WEBHOOK_WORKFLOW_Z, json=z_payload)
-                        if z_res.status_code == 200:
-                            data_from_n8n = z_res.json()
-                            fields = data_from_n8n if isinstance(data_from_n8n, list) else data_from_n8n.get("fields", [])
-                            st.session_state.dynamic_form_fields = fields
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-        else:
-            st.write("### Today's Recovery Check-in")
-            for idx, field in enumerate(st.session_state.dynamic_form_fields):
-                f_name = field.get("name") or field.get("Parameter Name") or f"Parameter {idx+1}"
-                raw_type = field.get("data_type") or field.get("type") or "text"
-                f_type = str(raw_type).strip().lower()
-                
-                with st.container(border=True):
-                    st.markdown(f"### {f_name}")
-                    if f_type == "text":
-                        user_input = st.text_area(f"Details", key=f"input_{idx}")
-                    elif f_type == "image":
-                        user_input = st.file_uploader(f"Photo", type=['png', 'jpg'], key=f"input_{idx}")
-                    elif f_type == "audio":
-                        user_input = st.file_uploader(f"Audio", type=['mp3', 'wav'], key=f"input_{idx}")
-                    
-                    if st.button(f"Submit {f_name}", key=f"btn_{idx}"):
-                        st.success(f"✅ {f_name} submitted!")
+        # Trigger Workflow Z
+        if st.button("Fetch My Daily Parameters (Workflow Z)"):
+            with st.spinner("Loading requirements..."):
+                try:
+                    # Calling your Workflow Z URL
+                    res = requests.post(N8N_WEBHOOK_WORKFLOW_Z, json=details)
+                    if res.status_code == 200:
+                        st.session_state.dynamic_params = res.json()
+                        st.success("Form updated with your doctor's requirements!")
+                    else:
+                        st.error("Could not retrieve parameters from n8n.")
+                except Exception as e:
+                    st.error(f"Error connecting to n8n: {e}")
 
-        if st.button("Logout / Reset Portal"):
-            for key in ["login_details", "patient_params", "dynamic_form_fields"]:
-                st.session_state[key] = None
-            st.rerun()
+        # --- Dynamic Form Rendering ---
+        if st.session_state.dynamic_params:
+            st.divider()
+            st.markdown("### 📋 Daily Recovery Check-in")
+            
+            # Using a form to batch inputs
+            with st.form("recovery_submission_form"):
+                user_responses = {}
+                
+                for item in st.session_state.dynamic_params:
+                    label = item.get("parameter")
+                    dtype = item.get("datatype").lower()
+                    
+                    st.write(f"**{label}**") # Question Header
+                    
+                    if dtype == "number":
+                        user_responses[label] = st.number_input(f"Enter value for {label}", key=label, label_visibility="collapsed")
+                    
+                    elif dtype == "text":
+                        user_responses[label] = st.text_area(f"Write details for {label}", key=label, label_visibility="collapsed")
+                    
+                    elif dtype == "audio":
+                        # Streamlit native audio recorder (requires browser mic access)
+                        audio_data = st.audio_input(f"Record audio for {label}", key=label, label_visibility="collapsed")
+                        user_responses[label] = audio_data
+                    
+                    elif dtype == "image":
+                        img_data = st.file_uploader(f"Upload photo for {label}", type=['png', 'jpg', 'jpeg'], key=label, label_visibility="collapsed")
+                        user_responses[label] = img_data
+
+                submitted = st.form_submit_button("Submit Daily Report")
+
+                if submitted:
+                    with st.spinner("Processing files and sending..."):
+                        # Prepare the final payload by encoding files
+                        final_submission = {
+                            "patient_info": details,
+                            "report_date": time.strftime("%Y-%m-%d"),
+                            "data": {}
+                        }
+
+                        for key, value in user_responses.items():
+                            # If the value is a file (audio/image), encode it to Base64
+                            if hasattr(value, 'getvalue'): 
+                                final_submission["data"][key] = {
+                                    "filename": value.name,
+                                    "base64": encode_file_to_base64(value)
+                                }
+                            else:
+                                final_submission["data"][key] = value
+
+                        try:
+                            # Send to your final processing webhook
+                            response = requests.post(N8N_WEBHOOK_PROCESS_SUBMISSION, json=final_submission)
+                            if response.status_code == 200:
+                                st.success("Successfully submitted! Your doctor will be notified.")
+                                st.balloons()
+                            else:
+                                st.error(f"Submission failed: {response.status_code}")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
