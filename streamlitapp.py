@@ -61,7 +61,7 @@ if app_mode == "Doctor's Panel":
                 "Surgery Type": surgery_type
             }
             try:
-                response = requests.post(N8N_WEBHOOK_DOCTOR_CONFIG, json=payload)
+                response = requests.get(N8N_WEBHOOK_DOCTOR_CONFIG, json=payload)
                 if response.status_code == 200:
                     st.session_state.temp_data = payload
                     st.session_state.doc_step = "branch"
