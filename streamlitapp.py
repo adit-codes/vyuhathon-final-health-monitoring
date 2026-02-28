@@ -10,7 +10,7 @@ st.set_page_config(page_title="Telehealth AI Assistant", layout="wide")
 # --- Webhook URLs (Replace with your actual production URLs) ---
 N8N_WEBHOOK_DOCTOR_CONFIG = "https://bytebeez.app.n8n.cloud/webhook-test/DOCinp1"
 N8N_WEBHOOK_WORKFLOW_X_MANUAL = "https://bytebeez.app.n8n.cloud/webhook-test/WORKFLOW_X_MANUAL"
-N8N_WEBHOOK_WORKFLOW_Y_AI = "https://your-n8n-instance.com/webhook/workflow-y"
+N8N_WEBHOOK_WORKFLOW_Y_AI = "https://bytebeez.app.n8n.cloud/webhook-test/DOCinpY"
 
 N8N_WEBHOOK_GET_PATIENT_PARAMS = "https://adi440.app.n8n.cloud/webhook-test/PATIENTINPUT"
 N8N_WEBHOOK_PROCESS_SUBMISSION = "https://your-n8n-instance.com/webhook/process-submission"
@@ -115,7 +115,7 @@ if app_mode == "Doctor's Panel":
             st.info("AI will automatically determine thresholds based on surgery type.")
             if st.button("Generate via AI (Workflow Y)"):
                 try:
-                    res = requests.post(N8N_WORKFLOW_Y_AI, json=st.session_state.temp_data)
+                    res = requests.get(N8N_WEBHOOK_WORKFLOW_Y_AI, json=st.session_state.temp_data)
                     if res.status_code == 200:
                         st.success("AI Workflow Y Triggered!")
                         st.balloons()
