@@ -152,7 +152,7 @@ elif app_mode == "Patient's Portal":
                             "Doc Name": id_doctor_name,
                             "Surgery Type": id_surgery
                         }
-                        response = requests.post(N8N_WEBHOOK_GET_PATIENT_PARAMS, json=lookup_payload)
+                        response = requests.get(N8N_WEBHOOK_GET_PATIENT_PARAMS, json=lookup_payload)
                         response.raise_for_status()
                         patient_params = response.json()
 
