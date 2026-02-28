@@ -160,36 +160,89 @@ elif app_mode == "Patient's Portal":
                     except Exception as e:
                         st.error(f"Error fetching patient parameters: {e}")
 
-    # --- Post-Login Section (Workflow Z) ---
+# --- Post-Login Section (Workflow Z & Dynamic Inputs) ---
 else:
     details = st.session_state["login_details"]
     st.subheader(f"Welcome, {details['Patient Name']}")
-    st.write("Your profile is loaded. Before entering your daily data, please initialize the session.")
     
-    if st.button("Fetch Data Input Details (Trigger Workflow Z)"):
-        with st.spinner("Running Workflow Z..."):
-            try:
-                z_payload = {
-                    "patient_info": details, 
-                    "params": st.session_state["patient_params"]
-                }
-                z_res = requests.get(N8N_WEBHOOK_WORKFLOW_Z, json=z_payload)
+    # Check if we have fields to display. If not, show the trigger button.
+    if "dynamic_form_fields" not in st.session_state:
+        st.info("Your profile is loaded. Please initialize your daily check-in.")
+        if st.button("Fetch My Daily Parameters"):
+            with st.spinner("Loading requirements..."):
+                try:
+                    z_payload = {
+                        "patient_info": details, 
+                        "params": st.session_state["patient_params"]
+                    }
+                    z_res = requests.get(N8N_WEBHOOK_WORKFLOW_Z, json=z_payload)
+                    
+                    if z_res.status_code == 200:
+                        data_from_n8n = z_res.json()
+                        # Handling both list and dict response formats
+                        fields = data_from_n8n if isinstance(data_from_n8n, list) else data_from_n8n.get("fields", [])
+                        st.session_state.dynamic_form_fields = fields
+                        st.rerun()
+                    else:
+                        st.error("Failed to fetch parameters from server.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+    
+    # --- DYNAMIC FORM RENDERING ---
+    else:
+        st.write("### Today's Recovery Check-in")
+        st.caption("Please provide the following data requested by your doctor:")
+
+        for idx, field in enumerate(st.session_state.dynamic_form_fields):
+            # Extract metadata from the n8n response
+            # Assuming format: {"name": "Wound Photo", "data_type": "image", "threshold": "no redness"}
+            f_name = field.get("name", f"Parameter {idx+1}")
+            f_type = field.get("data_type", "text").lower()
+            
+            with st.container(border=True):
+                st.markdown(f"**{f_name}**")
                 
-                if z_res.status_code == 200:
-                    # --- CRITICAL CHANGE: Parse the JSON and save it ---
-                    data_from_n8n = z_res.json()
-                    
-                    # Ensure we are saving a list of dictionaries to dynamic_form_fields
-                    # (Adjust 'fields' if your n8n JSON key is different)
-                    if isinstance(data_from_n8n, list):
-                        st.session_state.dynamic_form_fields = data_from_n8n
-                    elif "fields" in data_from_n8n:
-                        st.session_state.dynamic_form_fields = data_from_n8n["fields"]
-                    
-                    st.success("Workflow Z initialized successfully!")
-                    st.rerun() # Refresh to trigger the dynamic form rendering
-                else:
-                    st.error(f"Workflow Z failed with status: {z_res.status_code}")
-            except Exception as e:
-                st.error(f"Error triggering Workflow Z: {e}")
-                    
+                user_input = None
+                
+                # Render widget based on type
+                if f_type == "text":
+                    user_input = st.text_area(f"Enter details for {f_name}", key=f"input_{idx}")
+                
+                elif f_type == "image":
+                    user_input = st.file_uploader(f"Upload photo for {f_name}", type=['png', 'jpg', 'jpeg'], key=f"input_{idx}")
+                    if user_input:
+                        st.image(user_input, width=300)
+                
+                elif f_type == "audio":
+                    user_input = st.file_uploader(f"Upload audio for {f_name}", type=['mp3', 'wav', 'm4a'], key=f"input_{idx}")
+                    if user_input:
+                        st.audio(user_input)
+
+                # Individual Submit Button for this parameter
+                if st.button(f"Submit {f_name}", key=f"btn_{idx}"):
+                    if user_input:
+                        with st.spinner(f"Sending {f_name}..."):
+                            # Logic to send to your submission webhook
+                            submit_payload = {
+                                "patient_id": details.get("Patient Name"), # Or use the ID generated in Doc Panel
+                                "parameter_name": f_name,
+                                "data_type": f_type,
+                                "timestamp": time.time()
+                            }
+                            
+                            # Note: For files (image/audio), you'd usually send via 'files' parameter in requests
+                            try:
+                                # Example of sending as a POST request
+                                # res = requests.post(N8N_WEBHOOK_PROCESS_SUBMISSION, data=submit_payload)
+                                st.success(f"✅ {f_name} submitted successfully!")
+                            except Exception as e:
+                                st.error(f"Failed to send {f_name}: {e}")
+                    else:
+                        st.warning("Please provide data before submitting.")
+
+        if st.button("Logout / Reset"):
+            for key in ["login_details", "patient_params", "dynamic_form_fields"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
+
