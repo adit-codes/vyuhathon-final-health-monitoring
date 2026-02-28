@@ -161,60 +161,35 @@ elif app_mode == "Patient's Portal":
                         st.error(f"Error fetching patient parameters: {e}")
 
     # --- Post-Login Section (Workflow Z) ---
-    else:
-        details = st.session_state["login_details"]
-        st.subheader(f"Welcome, {details['Patient Name']}")
-        st.write("Your profile is loaded. Before entering your daily data, please initialize the session.")
-        
-        if st.button("Fetch Data Input Details (Trigger Workflow Z)"):
-            with st.spinner("Running Workflow Z..."):
-                try:
-                    z_payload = {
-                        "patient_info": details, 
-                        "params": st.session_state["patient_params"]
-                    }
-                    z_res = requests.get(N8N_WEBHOOK_WORKFLOW_Z, json=z_payload)
+else:
+    details = st.session_state["login_details"]
+    st.subheader(f"Welcome, {details['Patient Name']}")
+    st.write("Your profile is loaded. Before entering your daily data, please initialize the session.")
+    
+    if st.button("Fetch Data Input Details (Trigger Workflow Z)"):
+        with st.spinner("Running Workflow Z..."):
+            try:
+                z_payload = {
+                    "patient_info": details, 
+                    "params": st.session_state["patient_params"]
+                }
+                z_res = requests.get(N8N_WEBHOOK_WORKFLOW_Z, json=z_payload)
+                
+                if z_res.status_code == 200:
+                    # --- CRITICAL CHANGE: Parse the JSON and save it ---
+                    data_from_n8n = z_res.json()
                     
-                    if z_res.status_code == 200:
-                        st.session_state.workflow_z_triggered = True
-                        st.success("Workflow Z initialized successfully!")
-                    else:
-                        st.error(f"Workflow Z failed with status: {z_res.status_code}")
-                except Exception as e:
-                    st.error(f"Error triggering Workflow Z: {e}")
-                    # --- DYNAMIC FORM RENDERING ---
-    if "dynamic_form_fields" in st.session_state:
-        st.write("### Daily Check-in Form")
-        captured_data = {}
-        
-        with st.form("dynamic_checkin_form"):
-            # Iterate through the fields provided by n8n
-            for item in st.session_state.dynamic_form_fields:
-                label = item.get("parameter")
-                dtype = item.get("datatype")
-                
-                # Logic to map n8n 'datatype' to Streamlit widgets
-                if dtype == "text":
-                    captured_data[label] = st.text_input(label)
-                
-                elif dtype == "audio":
-                    # For audio, we use the file uploader
-                    captured_data[label] = st.file_uploader(f"Upload audio for: {label}", type=['mp3', 'wav', 'm4a'])
-                
-                elif dtype == "image":
-                    captured_data[label] = st.file_uploader(f"Upload image for: {label}", type=['jpg', 'png', 'jpeg'])
-                
-                elif dtype == "number":
-                    captured_data[label] = st.number_input(label)
-
-            submitted = st.form_submit_button("Submit Daily Report")
-            
-            if submitted:
-                # Logic to send collected data back to n8n for processing
-                st.info("Sending report to doctor...")
-                # process_res = requests.post(N8N_WEBHOOK_PROCESS_SUBMISSION, json=captured_data)
-                st.success("Report submitted successfully!")
-
-        if st.button("Reset Form"):
-            del st.session_state.dynamic_form_fields
-            st.rerun()
+                    # Ensure we are saving a list of dictionaries to dynamic_form_fields
+                    # (Adjust 'fields' if your n8n JSON key is different)
+                    if isinstance(data_from_n8n, list):
+                        st.session_state.dynamic_form_fields = data_from_n8n
+                    elif "fields" in data_from_n8n:
+                        st.session_state.dynamic_form_fields = data_from_n8n["fields"]
+                    
+                    st.success("Workflow Z initialized successfully!")
+                    st.rerun() # Refresh to trigger the dynamic form rendering
+                else:
+                    st.error(f"Workflow Z failed with status: {z_res.status_code}")
+            except Exception as e:
+                st.error(f"Error triggering Workflow Z: {e}")
+                    
