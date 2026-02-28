@@ -145,11 +145,12 @@ elif app_mode == "Patient's Portal":
                 }
                 st.rerun()
 
-    # --- Post-Login Section (Workflow Z) ---
+    # --- Post-Login Section ---
     else:
         details = st.session_state["login_details"]
         st.subheader(f"Welcome, {details['Patient Name']}")
         
+        # Trigger Workflow Z if fields aren't loaded yet
         if st.session_state.dynamic_fields is None:
             if st.button("Fetch Data Input Details (Trigger Workflow Z)"):
                 with st.spinner("Running Workflow Z..."):
@@ -163,49 +164,42 @@ elif app_mode == "Patient's Portal":
                     except Exception as e:
                         st.error(f"Error: {e}")
         
-# --- Dynamic Form Generation based on Workflow Z JSON ---
-else:
-    st.write("Please fill in your daily recovery data:")
-    with st.form("daily_submission_form"):
-        user_responses = {}
-        for item in st.session_state.dynamic_fields:
-            label = item.get("parameter")
-            dtype = item.get("datatype")
-            
-            if dtype == "number":
-                user_responses[label] = st.number_input(f"Enter {label}", key=label)
-            
-            elif dtype == "text":
-                user_responses[label] = st.text_area(f"Enter {label}", key=label)
-            
-            # --- New Logic for Media Links ---
-            elif dtype == "video":
-                user_responses[label] = st.text_input(
-                    f"Enter {label} (Drive/Video URL)", 
-                    placeholder="https://drive.google.com/...", 
-                    key=label
-                )
+        # --- THIS PART WAS OUTSIDE THE ELIF BEFORE ---
+        else:
+            st.write("Please fill in your daily recovery data:")
+            with st.form("daily_submission_form"):
+                user_responses = {}
+                for item in st.session_state.dynamic_fields:
+                    label = item.get("parameter")
+                    dtype = item.get("datatype")
+                    
+                    if dtype == "number":
+                        user_responses[label] = st.number_input(f"Enter {label}", key=label)
+                    elif dtype == "text":
+                        user_responses[label] = st.text_area(f"Enter {label}", key=label)
+                    elif dtype == "video" or dtype == "audio":
+                        user_responses[label] = st.text_input(
+                            f"Enter {label} (Drive/Link URL)", 
+                            placeholder="https://drive.google.com/...", 
+                            key=label
+                        )
                 
-            elif dtype == "audio":
-                user_responses[label] = st.text_input(
-                    f"Enter {label} (Drive/Audio URL)", 
-                    placeholder="https://drive.google.com/...", 
-                    key=label
-                )
-            # ----------------------------------
-        
-        if st.form_submit_button("Submit Daily Report"):
-            # Process the final submission
-            final_payload = {
-                "metadata": st.session_state.login_details,
-                "data": user_responses
-            }
-            try:
-                res = requests.post(N8N_WEBHOOK_PROCESS_SUBMISSION, json=final_payload)
-                if res.status_code == 200:
-                    st.success("Report submitted successfully!")
-                    st.balloons()
-                else:
-                    st.error(f"Submission failed. Status code: {res.status_code}")
-            except Exception as e:
-                st.error(f"Error: {e}")
+                if st.form_submit_button("Submit Daily Report"):
+                    final_payload = {
+                        "metadata": st.session_state.login_details,
+                        "data": user_responses
+                    }
+                    try:
+                        res = requests.post(N8N_WEBHOOK_PROCESS_SUBMISSION, json=final_payload)
+                        if res.status_code == 200:
+                            st.success("Report submitted successfully!")
+                            st.balloons()
+                        else:
+                            st.error(f"Submission failed. Status: {res.status_code}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+            
+            if st.button("Log Out / Reset"):
+                st.session_state.login_details = None
+                st.session_state.dynamic_fields = None
+                st.rerun()
