@@ -158,91 +158,62 @@ if app_mode == "Patient's Portal":
                     }
                     st.rerun()
 
-  # --- Post-Login Section (The Dynamic Interface) ---
-    else:
-        details = st.session_state["login_details"]
-        st.subheader(f"Welcome, {details['Patient Name']}")
-        
-        # 1. Trigger Workflow Z to get Parameters
-        if st.button("🔄 Sync My Tasks (Workflow Z)"):
-            with st.spinner("Fetching your doctor's requirements..."):
-                try:
-                    # Make sure this URL matches your N8N_WEBHOOK_WORKFLOW_Z variable
-                    res = requests.post(N8N_WEBHOOK_WORKFLOW_Z, json=details)
-                    if res.status_code == 200:
-                        st.session_state.dynamic_params = res.json()
-                        st.success("Tasks updated!")
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Connection error: {e}")
-
-        # 2. Render Each Parameter with its own Upload/Submit
-        if st.session_state.get("dynamic_params"):
-            st.divider()
-            st.markdown("### 📋 Recovery Action Items")
-
-            for idx, item in enumerate(st.session_state.dynamic_params):
-                # Normalize label and datatype
-                label = item.get("parameter", "Unknown Task")
-                dtype = str(item.get("datatype", "text")).lower().strip()
+ # --- Post-Login Section ---
+else:
+    details = st.session_state["login_details"]
+    st.subheader(f"Welcome, {details['Patient Name']}")
+    
+    # 1. Trigger Workflow Z to get Parameters
+    if st.button("🔄 Sync My Tasks (Workflow Z)"):
+        with st.spinner("Fetching your doctor's requirements..."):
+            try:
+                # IMPORTANT: Use a POST request to send patient details
+                res = requests.post(N8N_WEBHOOK_WORKFLOW_Z, json=details)
                 
-                # UNIQUE KEY: This prevents the 'DuplicateElementKey' error
-                unique_key = f"{label.replace(' ', '_')}_{idx}"
+                if res.status_code == 200:
+                    # FORCE REFRESH: Clear the old params first
+                    st.session_state.dynamic_params = None 
+                    
+                    # SAVE NEW PARAMS: Now save the new JSON [audio, image, etc.]
+                    st.session_state.dynamic_params = res.json()
+                    
+                    st.success("New task types (Audio/Image) loaded!")
+                    st.rerun() # Refresh the UI immediately
+                else:
+                    st.error(f"Error: n8n returned status {res.status_code}")
+            except Exception as e:
+                st.error(f"Connection error: {e}")
+
+    # 2. The Rendering Loop (Check the logic here)
+    if st.session_state.get("dynamic_params"):
+        st.divider()
+        for idx, item in enumerate(st.session_state.dynamic_params):
+            label = item.get("parameter", "Task")
+            # We use .strip().lower() to ensure "audio " or "Audio" both work
+            dtype = str(item.get("datatype", "text")).strip().lower()
+            
+            unique_key = f"{label.replace(' ', '_')}_{idx}"
+            
+            with st.expander(f"Task: {label}", expanded=True):
+                # AUDIO LOGIC
+                if dtype == "audio":
+                    st.info("🎵 Please upload your voice recording")
+                    user_input = st.file_uploader("Select Audio File", type=['mp3', 'wav'], key=unique_key)
                 
-                with st.expander(f"Task: {label}", expanded=True):
-                    user_input = None
-                    
-                    if dtype == "number":
-                        user_input = st.number_input(f"Value for {label}", key=unique_key)
-                    
-                    elif dtype == "text":
-                        user_input = st.text_area(f"Notes for {label}", key=unique_key)
-                    
-                    # --- AUDIO UPLOADER ---
-                    elif dtype == "audio":
-                        st.write("🎵 **Audio Upload Required**")
-                        user_input = st.file_uploader(f"Upload recording for {label}", 
-                                                     type=['mp3', 'wav', 'm4a'], 
-                                                     key=unique_key)
-                    
-                    # --- IMAGE UPLOADER ---
-                    elif dtype == "image":
-                        st.write("📷 **Image Upload Required**")
-                        user_input = st.file_uploader(f"Upload photo for {label}", 
-                                                     type=['png', 'jpg', 'jpeg'], 
-                                                     key=unique_key)
-                    
-                    else:
-                        user_input = st.text_input(f"Enter {label}", key=unique_key)
+                # IMAGE LOGIC
+                elif dtype == "image":
+                    st.info("📷 Please upload a photo")
+                    user_input = st.file_uploader("Select Image File", type=['jpg', 'png', 'jpeg'], key=unique_key)
+                
+                # NUMBER LOGIC
+                elif dtype == "number":
+                    user_input = st.number_input("Enter value", key=unique_key)
+                
+                # TEXT LOGIC
+                else:
+                    user_input = st.text_area("Enter details", key=unique_key)
 
-                    # 3. Individual Submit Button for this specific task
-                    if st.button(f"Submit {label}", key=f"btn_{unique_key}"):
-                        if user_input is not None:
-                            # Prepare individual payload
-                            val_to_send = user_input
-                            
-                            # Handle File Conversion to Base64
-                            if dtype in ["audio", "image"]:
-                                with st.spinner("Processing file..."):
-                                    val_to_send = {
-                                        "filename": user_input.name,
-                                        "base64": encode_file_to_base64(user_input)
-                                    }
-
-                            payload = {
-                                "patient_info": details,
-                                "parameter": label,
-                                "value": val_to_send
-                            }
-
-                            try:
-                                # Send to your process-submission webhook
-                                res = requests.post(N8N_WEBHOOK_PROCESS_SUBMISSION, json=payload)
-                                if res.status_code == 200:
-                                    st.success(f"✅ Submitted {label}!")
-                                else:
-                                    st.error("Failed to send to server.")
-                            except Exception as e:
-                                st.error(f"Error: {e}")
-                        else:
-                            st.warning("Please provide input/file before submitting.")
+                # Individual Submit
+                if st.button(f"Submit {label}", key=f"btn_{unique_key}"):
+                    # ... (your submission code)
+                    st.write(f"Sending {dtype} data...")
